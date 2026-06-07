@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AskController;
+use App\Http\Controllers\ChatController;
 
 Route::inertia('/', 'Welcome')->name('home');
 
@@ -12,6 +13,10 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
 });
 
 require __DIR__.'/settings.php';
