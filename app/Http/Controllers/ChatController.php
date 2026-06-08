@@ -23,4 +23,122 @@ class ChatController extends Controller
             'selectedModel' => $user->selected_model ?? $this->askService::DEFAULT_MODEL,
         ]);
     }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'message' => 'required|string',
+            'model' => 'required|string',
+            'conversation_id' => 'nullable|exists:conversations,id',
+        ]);
+
+        $user = auth()->user();
+
+        // 2. Conversation existante, ou nouvelle si c'est un premier message
+        if ($validated['conversation_id'] ?? null) {
+            $conversation = $user->conversations()->findOrFail($validated['conversation_id']);
+        } else {
+            $conversation = $user->conversations()->create([
+                'model' => $validated['model'],
+            ]);
+        }
+
+        // 3. On enregistre le message de l'utilisateur
+        $conversation->messages()->create([
+            'role' => 'user',
+            'content' => $validated['message'],
+        ]);
+
+        // 4. On reconstitue tout l'historique au format attendu par l'API
+        $history = $conversation->messages()
+            ->orderBy('created_at')
+            ->get(['role', 'content'])
+            ->map(function ($m) {
+                return ['role' => $m->role, 'content' => $m->content];
+            })
+            ->toArray();
+
+        // 5. On interroge le modèle
+        $response = $this->askService->sendMessage(
+            messages: $history,
+            model: $validated['model'],
+        );
+
+        // 6. On enregistre la réponse du gpt-lion
+        $conversation->messages()->create([
+            'role' => 'assistant',
+            'content' => $response,
+        ]);
+
+        // 7. Premier échange ? On génère un titre
+        if ($conversation->messages()->count() === 2) {
+            $conversation->update([
+                'title' => $this->generateTitle($validated['message']),
+            ]);
+        }
+
+        // 8. On bascule sur la conversation
+        return redirect()->route('chat.show', $conversation->id);
+    }
+    private function generateTitle(string $firstMessage): string
+    {
+        $messages = [[
+            'role' => 'user',
+            'content' => "Résume en 5 à 8 mots maximum le sujet de ce message, "
+                . "sans ponctuation finale, pour servir de titre court : \"{$firstMessage}\"",
+        ]];
+
+        try {
+            return trim($this->askService->sendMessage(messages: $messages));
+        } catch (\Exception $e) {
+            return 'Nouvelle conversation';   // filet de sécurité si l'API échoue
+        }
+    }
+
+    public function show(Conversation $conversation)
+    {
+        // Sécurité : l'utilisateur ne peut voir que SES conversations
+        abort_unless($conversation->user_id === auth()->id(), 403);
+
+        $user = auth()->user();
+
+        return Inertia::render('Chat/Index', [
+            'conversations' => $user->conversations()
+                ->latest()
+                ->get(['id', 'title', 'model', 'updated_at']),
+            'models' => $this->askService->getModels(),
+            'selectedModel' => $conversation->model,
+            'currentConversation' => [
+                'id' => $conversation->id,
+                'title' => $conversation->title,
+                'model' => $conversation->model,
+                'messages' => $conversation->messages()
+                    ->orderBy('created_at')
+                    ->get(['role', 'content']),
+            ],
+        ]);
+    }
+
+    public function updateModel(Request $request)
+    {
+        $validated = $request->validate([
+            'model' => 'required|string',
+            'conversation_id' => 'nullable|exists:conversations,id',
+        ]);
+
+        $user = auth()->user();
+
+        // 1. On mémorise la préférence globale dans la table users
+        $user->update(['selected_model' => $validated['model']]);
+
+        // 2. Si une conversation est ouverte, on synchronise aussi son modèle
+        if ($validated['conversation_id'] ?? null) {
+            $user->conversations()
+                ->findOrFail($validated['conversation_id'])
+                ->update(['model' => $validated['model']]);
+        }
+
+        return back();
+    }
 }
+
