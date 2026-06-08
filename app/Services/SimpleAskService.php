@@ -110,7 +110,8 @@ class SimpleAskService
      */
     private function getSystemPrompt(): array
     {
-        $user = auth()->user()?->name ?? 'l\'utilisateur';
+        $authUser = auth()->user();
+        $user = $authUser?->name ?? 'l\'utilisateur';
         $now = now()->locale('fr')->format('l d F Y H:i');
 
         return [
@@ -118,6 +119,8 @@ class SimpleAskService
             'content' => view('prompts.system', [
                 'now' => $now,
                 'user' => $user,
+                'aboutYou' => $authUser?->about_you,   // ← nouveau
+                'behavior' => $authUser?->behavior,    // ← nouveau
             ])->render(),
         ];
     }

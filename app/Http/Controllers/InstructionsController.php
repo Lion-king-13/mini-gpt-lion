@@ -14,6 +14,7 @@ class InstructionsController extends Controller
         return Inertia::render('Instructions/Edit', [
             'aboutYou' => $user->about_you,
             'behavior' => $user->behavior,
+            'commands' => $user->commands,
         ]);
     }
 
@@ -22,6 +23,7 @@ class InstructionsController extends Controller
         $validated = $request->validate([
             'about_you' => 'nullable|string|max:2000',
             'behavior' => 'nullable|string|max:2000',
+            'commands' => 'nullable|string|max:2000',
         ]);
 
         auth()->user()->update($validated);

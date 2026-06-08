@@ -47,7 +47,7 @@ const md = new MarkdownIt({
     highlight: (str, lang) => {
         if (lang && hljs.getLanguage(lang)) {
             try {
- return hljs.highlight(str, { language: lang }).value 
+ return hljs.highlight(str, { language: lang }).value
 } catch {}
         }
 
@@ -111,6 +111,9 @@ watch(() => form.processing, scrollToBottom)
                     {{ c.title ?? 'Sans titre' }}
                 </Link>
             </nav>
+            <Link href="/instructions" class="text-xs text-gray-400 hover:text-amber-600">
+                ⚙️ Instructions
+            </Link>
             <!-- Bloc compte en bas de la sidebar -->
             <div class="border-t dark:border-gray-700 p-3 flex items-center gap-3">
                 <div class="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center text-sm font-medium">

@@ -34,6 +34,18 @@ class ChatController extends Controller
 
         $user = auth()->user();
 
+        $messageContent = $validated['message'];
+        $commands = $this->parseCommands($user->commands);
+
+        foreach ($commands as $name => $instruction) {
+            // Le message commence-t-il par cette commande ? (ex: "/eli5 ...")
+            if (str_starts_with($messageContent, $name . ' ') || $messageContent === $name) {
+                $rest = trim(substr($messageContent, strlen($name)));
+                $messageContent = $instruction . ' ' . $rest;
+                break; // une seule commande à la fois
+            }
+        }
+
         // 2. Conversation existante, ou nouvelle si c'est un premier message
         if ($validated['conversation_id'] ?? null) {
             $conversation = $user->conversations()->findOrFail($validated['conversation_id']);
@@ -46,7 +58,7 @@ class ChatController extends Controller
         // 3. On enregistre le message de l'utilisateur
         $conversation->messages()->create([
             'role' => 'user',
-            'content' => $validated['message'],
+            'content' => $messageContent,
         ]);
 
         // 4. On reconstitue tout l'historique au format attendu par l'API
@@ -139,6 +151,30 @@ class ChatController extends Controller
         }
 
         return back();
+    }
+
+    private function parseCommands(?string $raw): array
+    {
+        if (!$raw) {
+            return [];
+        }
+
+        $commands = [];
+
+        foreach (explode("\n", $raw) as $line) {
+            $line = trim($line);
+
+            // On ne garde que les lignes qui commencent par "/" et contiennent un "="
+            if (!str_starts_with($line, '/') || !str_contains($line, '=')) {
+                continue;
+            }
+
+            [$name, $instruction] = explode('=', $line, 2);
+
+            $commands[trim($name)] = trim($instruction);
+        }
+
+        return $commands;
     }
 }
 
