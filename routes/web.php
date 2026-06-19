@@ -31,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/chat/prepare', [ChatController::class, 'prepare'])->name('chat.prepare');
     Route::get('/chat/{conversation}', [ChatController::class, 'show'])->name('chat.show');
     Route::post('/chat/{conversation}/stream', [ChatController::class, 'stream'])->name('chat.stream');
+    Route::delete('/chat/{conversation}', [ChatController::class, 'destroy'])->name('chat.destroy');
 });
 
 

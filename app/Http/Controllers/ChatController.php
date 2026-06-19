@@ -264,5 +264,15 @@ class ChatController extends Controller
             'X-Accel-Buffering' => 'no',
         ]);
     }
+
+    public function destroy(Conversation $conversation)
+    {
+        // Sécurité : on ne supprime que SES propres conversations
+        abort_unless($conversation->user_id === auth()->id(), 403);
+
+        $conversation->delete();
+
+        return redirect()->route('chat.index');
+    }
 }
 

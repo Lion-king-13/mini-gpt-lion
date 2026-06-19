@@ -29,7 +29,7 @@ const parsedCommands = computed(() => {
         .filter(line => line.startsWith('/') && line.includes('='))
         .map(line => {
             const [name, ...rest] = line.split('=')
-            
+
             return { name: name.trim(), instruction: rest.join('=').trim() }
         })
 })
@@ -135,6 +135,7 @@ const md = new MarkdownIt({
                 /* ignore */
             }
         }
+
         return ''
     },
 })
@@ -148,6 +149,11 @@ const scrollToBottom = () => {
             el.scrollTop = el.scrollHeight
         }
     })
+}
+const deleteConversation = (id: number) => {
+    if (!confirm('Supprimer cette conversation ? Cette action est irréversible.')) return
+
+    router.delete(`/chat/${id}`)
 }
 
 onMounted(scrollToBottom)
@@ -181,17 +187,28 @@ watch(isStreaming, scrollToBottom)
 
             <!-- Liste des conversations -->
             <nav class="flex-1 overflow-y-auto px-2 space-y-1">
-                <Link
+                <div
                     v-for="c in conversations"
                     :key="c.id"
-                    :href="`/chat/${c.id}`"
-                    class="block px-3 py-2 rounded text-sm truncate"
+                    class="group flex items-center rounded text-sm"
                     :class="c.id === currentConversation?.id
                         ? 'bg-amber-100 dark:bg-amber-900 font-medium'
                         : 'hover:bg-gray-100 dark:hover:bg-gray-800'"
                 >
-                    {{ c.title ?? 'Sans titre' }}
-                </Link>
+                    <Link
+                        :href="`/chat/${c.id}`"
+                        class="flex-1 px-3 py-2 truncate"
+                    >
+                        {{ c.title ?? 'Sans titre' }}
+                    </Link>
+                    <button
+                        @click="deleteConversation(c.id)"
+                        class="px-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                        title="Supprimer"
+                    >
+                        ✕
+                    </button>
+                </div>
             </nav>
             <!-- Liste des commandes enregistrées -->
             <div v-if="parsedCommands.length" class="px-3 py-2 border-t dark:border-gray-700">
