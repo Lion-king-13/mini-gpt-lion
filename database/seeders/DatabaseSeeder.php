@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use App\Models\Conversation;
+use App\Models\Message;
 
 class DatabaseSeeder extends Seeder
 {
@@ -21,5 +23,16 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        $user = User::factory()->create([
+            'name' => 'Simba',
+            'email' => 'simba@lion.test',
+            'selected_model' => 'openai/gpt-5-mini',
+        ]);
+
+        Conversation::factory(2)
+            ->for($user)
+            ->has(Message::factory(2))
+            ->create();
     }
 }

@@ -6,7 +6,11 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\InstructionsController;
 
 
-Route::inertia('/', 'Welcome')->name('home');
+Route::get('/', function () {
+    return auth()->check()
+        ? redirect()->route('chat.index')
+        : redirect()->route('login');
+})->name('home');
 
 
 Route::middleware(['auth'])->group(function () {
@@ -15,7 +19,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
     Route::post('/chat/model', [ChatController::class, 'updateModel'])->name('chat.model');
-    Route::get('/chat/{conversation}', [ChatController::class, 'show'])->name('chat.show');
     Route::post('/chat', [ChatController::class, 'store'])->name('chat.store');
 
     Route::get('/instructions', [InstructionsController::class, 'edit'])->name('instructions.edit');
@@ -23,6 +26,11 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/ask', [AskController::class, 'index'])->name('ask.index');
     Route::post('/ask', [AskController::class, 'ask'])->name('ask.post');
+    Route::get('/ask-stream', [\App\Http\Controllers\AskStreamController::class, 'index'])->name('stream.index');
+    Route::post('/ask-stream', [\App\Http\Controllers\AskStreamController::class, 'stream'])->name('stream.post');
+    Route::post('/chat/prepare', [ChatController::class, 'prepare'])->name('chat.prepare');
+    Route::get('/chat/{conversation}', [ChatController::class, 'show'])->name('chat.show');
+    Route::post('/chat/{conversation}/stream', [ChatController::class, 'stream'])->name('chat.stream');
 });
 
 

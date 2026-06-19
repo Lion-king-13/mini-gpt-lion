@@ -6,10 +6,13 @@ use App\Models\Conversation;
 use App\Services\SimpleAskService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Services\SimpleAskStreamService;
 
 class ChatController extends Controller
 {
-    public function __construct(private SimpleAskService $askService) {}
+    public function __construct(
+        private SimpleAskService $askService,
+        private SimpleAskStreamService $streamService,) {}
 
     public function index()
     {
@@ -21,6 +24,7 @@ class ChatController extends Controller
                 ->get(['id', 'title', 'model', 'updated_at']),
             'models' => $this->askService->getModels(),
             'selectedModel' => $user->selected_model ?? $this->askService::DEFAULT_MODEL,
+            'commands' => auth()->user()->commands,
         ]);
     }
 
@@ -112,6 +116,10 @@ class ChatController extends Controller
         // Sécurité : l'utilisateur ne peut voir que SES conversations
         abort_unless($conversation->user_id === auth()->id(), 403);
 
+        $conversation->load(['messages' => function ($query) {
+            $query->orderBy('created_at');
+        }]);
+
         $user = auth()->user();
 
         return Inertia::render('Chat/Index', [
@@ -128,6 +136,7 @@ class ChatController extends Controller
                     ->orderBy('created_at')
                     ->get(['role', 'content']),
             ],
+            'commands' => auth()->user()->commands,
         ]);
     }
 
@@ -175,6 +184,85 @@ class ChatController extends Controller
         }
 
         return $commands;
+    }
+
+    public function prepare(Request $request)
+    {
+        $validated = $request->validate([
+            'message' => 'required|string',
+            'model' => 'required|string',
+            'conversation_id' => 'nullable|exists:conversations,id',
+        ]);
+
+        $user = auth()->user();
+
+        // Expansion des commandes (réutilise ta méthode existante)
+        $messageContent = $validated['message'];
+        foreach ($this->parseCommands($user->commands) as $name => $instruction) {
+            if (str_starts_with($messageContent, $name . ' ') || $messageContent === $name) {
+                $rest = trim(substr($messageContent, strlen($name)));
+                $messageContent = $instruction . ' ' . $rest;
+                break;
+            }
+        }
+
+        // Conversation existante ou nouvelle
+        if ($validated['conversation_id'] ?? null) {
+            $conversation = $user->conversations()->findOrFail($validated['conversation_id']);
+        } else {
+            $conversation = $user->conversations()->create(['model' => $validated['model']]);
+        }
+
+        // On enregistre le message user
+        $conversation->messages()->create([
+            'role' => 'user',
+            'content' => $messageContent,
+        ]);
+
+        // On renvoie l'id à la vue (réponse JSON, pas Inertia)
+        return response()->json(['conversation_id' => $conversation->id]);
+    }
+
+    public function stream(Request $request, Conversation $conversation)
+    {
+        abort_unless($conversation->user_id === auth()->id(), 403);
+
+        // On reconstitue l'historique complet pour donner le contexte au modèle
+        $history = $conversation->messages()
+            ->orderBy('created_at')
+            ->get(['role', 'content'])
+            ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
+            ->toArray();
+
+        return response()->stream(function () use ($history, $conversation) {
+            $fullResponse = '';
+
+            // On streame ET on capture chaque morceau
+            $this->streamService->streamToOutputAndCapture(
+                messages: $history,
+                model: $conversation->model,
+                onChunk: function (string $chunk) use (&$fullResponse) {
+                    $fullResponse .= $chunk;
+                },
+            );
+
+            // Le stream est fini → on sauvegarde la réponse complète en base
+            $conversation->messages()->create([
+                'role' => 'assistant',
+                'content' => $fullResponse,
+            ]);
+
+            // Génération du titre au premier échange
+            if ($conversation->messages()->count() === 2) {
+                $conversation->update([
+                    'title' => $this->generateTitle($conversation->messages()->first()->content),
+                ]);
+            }
+        }, headers: [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Cache-Control' => 'no-cache, no-store',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 }
 
